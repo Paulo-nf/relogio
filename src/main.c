@@ -36,13 +36,10 @@ char item[50] = {0};
 
 void limparLinha() { printf("                                             "); }
 
-// Internal function to handle the Clock Algorithm (Second Chance)
 void addPage(const char *a, const char *b) {
   while (1) {
-    // If slot is empty OR the "chance" bit is 0, we can use this slot
     if (pages[clockHand].key[0] == '\0' || pages[clockHand].chance == 0) {
 
-      // If there was a page here, move it to Swap
       if (pages[clockHand].key[0] != '\0') {
         int foundSwapSlot = 0;
         for (int i = 0; i < SIZE; i++) {
@@ -66,7 +63,6 @@ void addPage(const char *a, const char *b) {
         }
       }
 
-      // Insert new page into the evicted/empty slot
       strcpy(pages[clockHand].key, a);
       strcpy(pages[clockHand].item, b);
       pages[clockHand].chance = 1;
@@ -75,16 +71,13 @@ void addPage(const char *a, const char *b) {
       return;
 
     } else {
-      // Second chance: reset bit and move to next slot
       pages[clockHand].chance = 0;
       clockHand = (clockHand + 1) % SIZE;
     }
   }
 }
 
-// Logic to handle Writing: Overwrite, Swap-to-RAM, or New Page
 void writePage(const char *k, const char *newData) {
-  // 1. Check RAM (Overwrite existing)
   for (int i = 0; i < SIZE; i++) {
     if (pages[i].key[0] != '\0' && strcmp(pages[i].key, k) == 0) {
       strcpy(pages[i].item, newData);
@@ -93,7 +86,6 @@ void writePage(const char *k, const char *newData) {
     }
   }
 
-  // 2. Check Swap (Bring to RAM and update)
   for (int i = 0; i < SIZE; i++) {
     if (swaps[i].key[0] != '\0' && strcmp(swaps[i].key, k) == 0) {
       swaps[i].key[0] = '\0';
@@ -103,7 +95,6 @@ void writePage(const char *k, const char *newData) {
     }
   }
 
-  // 3. Not found: Create new via Demand Paging
   addPage(k, newData);
 }
 
@@ -124,7 +115,6 @@ void removePage(const char *k) {
 }
 
 const char *readPage(const char *k) {
-  // Check RAM
   for (int i = 0; i < SIZE; i++) {
     if (strcmp(pages[i].key, k) == 0) {
       pages[i].chance = 1;
@@ -132,7 +122,6 @@ const char *readPage(const char *k) {
     }
   }
 
-  // Check Swap
   for (int i = 0; i < SIZE; i++) {
     if (strcmp(swaps[i].key, k) == 0) {
       char tempKey[50], tempItem[50];
@@ -144,7 +133,6 @@ const char *readPage(const char *k) {
 
       addPage(tempKey, tempItem);
 
-      // Find where it landed in RAM to return the pointer
       for (int j = 0; j < SIZE; j++) {
         if (strcmp(pages[j].key, tempKey) == 0) {
           return pages[j].item;
@@ -164,13 +152,11 @@ int main() {
   while (1) {
     screenSetColor(YELLOW, DARKGRAY);
 
-    // Render UI: Clock Hand
     for (int i = 0; i < SIZE; i++) {
       screenGotoxy(MINX + 1, MINY + 3 + i);
       (clockHand == i) ? printf("->") : printf("  ");
     }
 
-    // Render UI: RAM Pages
     for (int i = 0; i < SIZE; i++) {
       screenGotoxy(MINX + 3, MINY + 3 + i);
       if (pages[i].key[0] != '\0') {
@@ -181,7 +167,6 @@ int main() {
       }
     }
 
-    // Render UI: Swap Space
     for (int i = 0; i < SIZE; i++) {
       screenGotoxy(MINX + 3, MINY + SIZE + 5 + i);
       if (swaps[i].key[0] != '\0') {
@@ -191,14 +176,13 @@ int main() {
       }
     }
 
-    // Command Interface
     screenGotoxy(MINX + 1, MINY + 1);
     limparLinha();
     screenGotoxy(MINX + 1, MINY + 1);
     printf("Comando: (W)rite, (R)ead, (D)elete: ");
 
     scanf(" %c", &cmd);
-    keyboardDestroy(); // Temporarily stop keyboard for scanf
+    keyboardDestroy();
 
     if (cmd == 'W' || cmd == 'w') {
       screenGotoxy(MINX + 1, MINY + 1);
@@ -242,7 +226,7 @@ int main() {
       removePage(key);
     }
 
-    keyboardInit(); // Restart keyboard for next loop
+    keyboardInit();
   }
 
   return 0;
