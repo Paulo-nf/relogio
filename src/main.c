@@ -1,8 +1,7 @@
 /**
- * main.h
- * Created on Aug, 23th 2023
- * Author: Tiago Barros
- * Based on "From C to C++ course - 2002"
+ * main.c
+ * Integrated with writePage logic
+ * Author: Tiago Barros / Refined by Gemini
  */
 
 #include <stdio.h>
@@ -31,16 +30,19 @@ Page pages[SIZE] = {0};
 Swap swaps[SIZE] = {0};
 
 int clockHand = 0;
-int startingClockHand;
-int swapI;
 char cmd;
+char key[50] = {0};
+char item[50] = {0};
 
 void limparLinha() { printf("                                             "); }
 
+// Internal function to handle the Clock Algorithm (Second Chance)
 void addPage(const char *a, const char *b) {
   while (1) {
+    // If slot is empty OR the "chance" bit is 0, we can use this slot
     if (pages[clockHand].key[0] == '\0' || pages[clockHand].chance == 0) {
 
+      // If there was a page here, move it to Swap
       if (pages[clockHand].key[0] != '\0') {
         int foundSwapSlot = 0;
         for (int i = 0; i < SIZE; i++) {
@@ -56,20 +58,15 @@ void addPage(const char *a, const char *b) {
           screenClear();
           screenGotoxy(MINX + 1, MINY + 1);
           screenSetColor(WHITE, RED);
-
-          printf("\n\rOOM out of memory");
+          printf("\n\rOOM - Out of Swap Memory");
           printf("\n\rPressione qualquer tecla para sair...");
-
           getchar();
           getchar();
-
-          keyboardDestroy();
-          screenDestroy();
-          timerDestroy();
           exit(EXIT_FAILURE);
         }
       }
 
+      // Insert new page into the evicted/empty slot
       strcpy(pages[clockHand].key, a);
       strcpy(pages[clockHand].item, b);
       pages[clockHand].chance = 1;
@@ -78,21 +75,47 @@ void addPage(const char *a, const char *b) {
       return;
 
     } else {
+      // Second chance: reset bit and move to next slot
       pages[clockHand].chance = 0;
       clockHand = (clockHand + 1) % SIZE;
     }
   }
 }
 
-void removePage(const char *key) {
+// Logic to handle Writing: Overwrite, Swap-to-RAM, or New Page
+void writePage(const char *k, const char *newData) {
+  // 1. Check RAM (Overwrite existing)
   for (int i = 0; i < SIZE; i++) {
-    if (strcmp(pages[i].key, key) == 0) {
+    if (pages[i].key[0] != '\0' && strcmp(pages[i].key, k) == 0) {
+      strcpy(pages[i].item, newData);
+      pages[i].chance = 1; // Give it a second chance
+      return;
+    }
+  }
+
+  // 2. Check Swap (Bring to RAM and update)
+  for (int i = 0; i < SIZE; i++) {
+    if (swaps[i].key[0] != '\0' && strcmp(swaps[i].key, k) == 0) {
+      swaps[i].key[0] = '\0';
+      swaps[i].item[0] = '\0';
+      addPage(k, newData);
+      return;
+    }
+  }
+
+  // 3. Not found: Create new via Demand Paging
+  addPage(k, newData);
+}
+
+void removePage(const char *k) {
+  for (int i = 0; i < SIZE; i++) {
+    if (strcmp(pages[i].key, k) == 0) {
       pages[i].key[0] = '\0';
       pages[i].item[0] = '\0';
       pages[i].chance = 0;
       return;
     }
-    if (strcmp(swaps[i].key, key) == 0) {
+    if (strcmp(swaps[i].key, k) == 0) {
       swaps[i].key[0] = '\0';
       swaps[i].item[0] = '\0';
       return;
@@ -100,17 +123,18 @@ void removePage(const char *key) {
   }
 }
 
-const char *readPage(const char *key) {
+const char *readPage(const char *k) {
+  // Check RAM
   for (int i = 0; i < SIZE; i++) {
-    if (strcmp(pages[i].key, key) == 0) {
-      pages[i].chance = 1; // Mark as recently used
+    if (strcmp(pages[i].key, k) == 0) {
+      pages[i].chance = 1;
       return pages[i].item;
     }
   }
 
+  // Check Swap
   for (int i = 0; i < SIZE; i++) {
-    if (strcmp(swaps[i].key, key) == 0) {
-
+    if (strcmp(swaps[i].key, k) == 0) {
       char tempKey[50], tempItem[50];
       strcpy(tempKey, swaps[i].key);
       strcpy(tempItem, swaps[i].item);
@@ -120,6 +144,7 @@ const char *readPage(const char *key) {
 
       addPage(tempKey, tempItem);
 
+      // Find where it landed in RAM to return the pointer
       for (int j = 0; j < SIZE; j++) {
         if (strcmp(pages[j].key, tempKey) == 0) {
           return pages[j].item;
@@ -127,12 +152,8 @@ const char *readPage(const char *key) {
       }
     }
   }
-
   return NULL;
 }
-
-char key[50] = {0};
-char item[50] = {0};
 
 int main() {
   screenInit(1);
@@ -140,14 +161,16 @@ int main() {
   timerInit(50);
   screenUpdate();
 
-  while (67 == 67) {
+  while (1) {
     screenSetColor(YELLOW, DARKGRAY);
 
+    // Render UI: Clock Hand
     for (int i = 0; i < SIZE; i++) {
       screenGotoxy(MINX + 1, MINY + 3 + i);
       (clockHand == i) ? printf("->") : printf("  ");
     }
 
+    // Render UI: RAM Pages
     for (int i = 0; i < SIZE; i++) {
       screenGotoxy(MINX + 3, MINY + 3 + i);
       if (pages[i].key[0] != '\0') {
@@ -158,6 +181,7 @@ int main() {
       }
     }
 
+    // Render UI: Swap Space
     for (int i = 0; i < SIZE; i++) {
       screenGotoxy(MINX + 3, MINY + SIZE + 5 + i);
       if (swaps[i].key[0] != '\0') {
@@ -167,58 +191,59 @@ int main() {
       }
     }
 
+    // Command Interface
     screenGotoxy(MINX + 1, MINY + 1);
     limparLinha();
     screenGotoxy(MINX + 1, MINY + 1);
-    printf("Digite o comando (W)rite, (R)ead, (D)elete: ");
+    printf("Comando: (W)rite, (R)ead, (D)elete: ");
 
     scanf(" %c", &cmd);
-    keyboardDestroy();
+    keyboardDestroy(); // Temporarily stop keyboard for scanf
 
     if (cmd == 'W' || cmd == 'w') {
       screenGotoxy(MINX + 1, MINY + 1);
       limparLinha();
       screenGotoxy(MINX + 1, MINY + 1);
-      printf("Digite a chave: ");
+      printf("Chave: ");
       scanf("%49s", key);
       screenGotoxy(MINX + 1, MINY + 1);
       limparLinha();
       screenGotoxy(MINX + 1, MINY + 1);
-      printf("Digite o valor: ");
+      printf("Valor: ");
       scanf("%49s", item);
-      addPage(key, item);
+
+      writePage(key, item);
+
     } else if (cmd == 'R' || cmd == 'r') {
       screenGotoxy(MINX + 1, MINY + 1);
       limparLinha();
       screenGotoxy(MINX + 1, MINY + 1);
-      printf("Digite a chave: ");
+      printf("Chave: ");
       scanf("%49s", key);
       const char *result = readPage(key);
       screenGotoxy(MINX + 1, MINY + 1);
       limparLinha();
       screenGotoxy(MINX + 1, MINY + 1);
       if (result != NULL) {
-        printf("Valor: %s (Enter para continuar)", result);
+        printf("Valor: %s (Enter)", result);
       } else {
-        printf("Page Fault! (Enter para continuar)");
+        printf("Page Fault! (Enter)");
       }
       while (getchar() != '\n')
         ;
       getchar();
+
     } else if (cmd == 'D' || cmd == 'd') {
       screenGotoxy(MINX + 1, MINY + 1);
       limparLinha();
       screenGotoxy(MINX + 1, MINY + 1);
-      printf("Digite a chave: ");
+      printf("Chave: ");
       scanf("%49s", key);
       removePage(key);
     }
 
-    keyboardInit();
+    keyboardInit(); // Restart keyboard for next loop
   }
 
-  keyboardDestroy();
-  screenDestroy();
-  timerDestroy();
   return 0;
 }
